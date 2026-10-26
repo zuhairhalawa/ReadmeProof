@@ -1,0 +1,58 @@
+{
+  "name": "@zuhairhalawa/readmeproof",
+  "version": "0.1.0",
+  "description": "Check whether README instructions actually work: static checks offline, optional execution only inside disposable Docker containers.",
+  "keywords": ["readme", "markdown", "documentation", "verify", "docs-testing", "docker", "cli"],
+  "license": "MIT",
+  "author": "zuhairhalawa",
+  "type": "module",
+  "bin": {
+    "readmeproof": "dist/bin.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "clean": "node scripts/clean.mjs dist .test-build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "node scripts/clean.mjs dist && tsc -p tsconfig.build.json",
+    "test": "node scripts/clean.mjs .test-build && tsc -p tsconfig.test.json && node scripts/run-tests.mjs",
+    "pack:smoke": "node scripts/pack-smoke.mjs",
+    "prepack": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zuhairhalawa/readmeproof.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zuhairhalawa/readmeproof/issues"
+  },
+  "homepage": "https://github.com/zuhairhalawa/readmeproof#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "markdown-it": "^14.1.0"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^20.19.0",
+    "typescript": "~5.9.3"
+  }
+}

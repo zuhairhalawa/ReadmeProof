@@ -1,0 +1,13 @@
+{
+  "name": "acme-cli",
+  "version": "1.0.0",
+  "description": "Fixture project for readmeproof tests",
+  "bin": { "acme": "scripts/hello.js" },
+  "scripts": {
+    "build": "node scripts/hello.js",
+    "test": "node scripts/hello.js"
+  },
+  "dependencies": {},
+  "license": "MIT"
+}
+
