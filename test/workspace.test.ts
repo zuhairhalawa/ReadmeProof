@@ -63,9 +63,11 @@ describe('collectWorkspace', () => {
     assert.ok(ws.skipped.some((s) => s.path === '.env' && s.reason === 'environment file'));
   });
 
-  it('marks shebang scripts executable', () => {
+  it('file modes: Windows (no exec bits) marks shebang scripts executable; POSIX preserves the real mode bits', () => {
     const ws = collectWorkspace(project());
-    assert.equal(ws.entries.find((e) => e.path === 'work/scripts/run.sh')?.mode, 0o755);
+    const script = ws.entries.find((e) => e.path === 'work/scripts/run.sh')?.mode;
+    /* project() writes run.sh without the exec bit. On POSIX that is faithfully kept; only Windows infers it from "#!". */
+    assert.equal(script, process.platform === 'win32' ? 0o755 : 0o644);
     assert.equal(ws.entries.find((e) => e.path === 'work/README.md')?.mode, 0o644);
   });
 
