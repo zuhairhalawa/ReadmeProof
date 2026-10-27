@@ -12,8 +12,9 @@ Check whether the instructions in your README actually work.
 
 No telemetry, no uploads, no AI service. README contents are treated as untrusted input.
 
-> **Status: 0.1.0, not yet published to npm.** The commands below describe the package once released. Until then,
-> build from source (see [CONTRIBUTING.md](CONTRIBUTING.md)).
+> **Status: 0.1.0, published to npm** as
+> [`@zuhairhalawa/readmeproof`](https://www.npmjs.com/package/@zuhairhalawa/readmeproof) (`latest`). See
+> [Install](#install) below. To build from source instead, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 <p align="center">
   <img src="docs/assets/readmeproof-static-check-demo.gif" alt="Terminal recording: readmeproof check README.md runs on this repository's deliberately broken test fixture, test/fixtures/broken-project. It reports ten FAIL findings with file:line locations, including two broken-link findings (assets/missing.png and docs/setup.md), two anchor findings, a case-mismatch, a path-traversal, a package-name mismatch (acme_cli vs acme-cli), a package-script finding (npm run lint, but package.json has no lint script), a missing-file finding (node scripts/missing.js) and an invalid annotation, plus one UNVERIFIED generated-file finding. It finishes with Static checks: 2 PASS, 10 FAIL, 0 SKIP, 2 UNVERIFIED and Result: FAIL (exit code 1)." width="880">
