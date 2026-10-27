@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report security problems privately through GitHub's
-[private vulnerability reporting](https://github.com/zuhairhalawa/readmeproof/security/advisories/new)
+[private vulnerability reporting](https://github.com/zuhairhalawa/ReadmeProof/security/advisories/new)
 for this repository. Do not open a public issue for an unfixed vulnerability.
 
 Include the readmeproof version (`readmeproof --version`), your OS and Docker version, and a minimal README or
@@ -31,23 +31,35 @@ readmeproof's input is a README (and the project around it) from a source you ma
 | Guarantee | Mechanism | Tests |
 | --- | --- | --- |
 | No host execution | Execution code path only calls `docker`; missing Docker yields `UNAVAILABLE`, exit 3 | `verify.test.ts` (availability matrix) |
-| Network off by default | `--network none`; `bridge` only with the `--network` flag; annotations cannot enable it | `docker.test.ts`, `verify.test.ts`, `hostile.test.ts` |
-| No privileges | `--cap-drop ALL`, `no-new-privileges`, non-root `1000:1000`, no `--privileged`/devices/host namespaces | `docker.test.ts` forbids dangerous flags |
-| No host mounts or socket | No `-v`/`--mount`/volumes; workspace is streamed as tar over stdin into tmpfs | `docker.test.ts`, integration tests |
-| No inherited secrets | Container gets a fixed env list; the docker client gets an allowlisted env | `docker.test.ts` |
+| Network off by default | `--network none`; `bridge` only with the `--network` flag; annotations cannot enable it | `docker.simulated.test.ts`, `verify.test.ts`, `hostile.test.ts` |
+| No privileges | `--cap-drop ALL`, `no-new-privileges`, non-root `1000:1000`, no `--privileged`/devices/host namespaces | `docker.simulated.test.ts` forbids dangerous flags |
+| No host mounts or socket | No `-v`/`--mount`/volumes; workspace is streamed as tar over stdin into tmpfs | `docker.simulated.test.ts`, integration tests |
+| No inherited secrets | Container gets a fixed env list; the docker client gets an allowlisted env | `docker.simulated.test.ts` |
 | Sanitized copy | `.git`, `.env*`, keys, `.npmrc`/`.netrc`, cloud credential dirs, `node_modules`, symlinks, special files excluded; file/size caps | `workspace.test.ts`, `verify.test.ts` |
-| Resource limits | Memory (swap off), CPUs, PIDs, nofile, tmpfs sizes, per-block timeout with `docker kill`, bounded output with kill on runaway output | `docker.test.ts`, integration tests |
+| Resource limits | Memory (swap off), CPUs, PIDs, nofile, tmpfs sizes, per-block timeout with `docker kill`, bounded output with kill on runaway output | `docker.simulated.test.ts`, integration tests |
 | Path traversal / symlinks | Links are contained to the project boundary lexically and after `realpath`; the copy never follows symlinks | `checks.test.ts`, `hostile.test.ts`, `workspace.test.ts` |
 | Hostile Markdown | 2 MiB file cap, parser nesting limit, caps on blocks/links/spans, bounded regex input, bounded shell tokenizing | `hostile.test.ts` |
 | Terminal injection | Control characters, ANSI escapes and bidi overrides in README or container output are escaped before printing | `hostile.test.ts` |
 
-The **real Docker integration tests** (`test/docker.integration.test.ts`) assert these properties from *inside* a
-container: non-root uid, no network, read-only root filesystem, zero effective capabilities, `NoNewPrivs`, no Docker
-socket or host mounts, no inherited environment, no copied secrets, host project unchanged, timeout and cleanup,
-output bounds, memory and PID limits. They need a Linux-container Docker daemon and the image present locally. When
-Docker is unavailable they are **skipped with a loud message, and a skipped run proves nothing about isolation**. CI
-runs them on Linux with `READMEPROOF_DOCKER_TESTS=1`, which turns "Docker unavailable" into a failure.
+The **real Docker integration tests** (`test/docker.integration.test.ts`, suite "REAL DOCKER integration (actual
+containers)") start actual containers and assert these properties from *inside* the container and from the daemon
+(`docker inspect`): non-root uid, no network interface but loopback, read-only root filesystem (probed on a
+world-writable path, so file permissions cannot mask a missing `--read-only`), empty capability bounding set,
+`NoNewPrivs`, denied `mount`/`chown`/clock/sysctl, no Docker socket or host mounts, no inherited environment, a wide
+secret-file matrix that never arrives (canary content searched for inside the container), host project unchanged,
+time limit, bounded and runaway output, kernel OOM kill at the memory limit (exit 137 and `oom_kill` recorded in the
+container's cgroup), measured CPU throttling at `--cpus 0.5`, PID limit, and container removal after normal, failing,
+timed-out and output-flooded runs. Both cgroup v1 and v2 hosts are handled.
 
+Tests in `*.simulated.test.ts` and the suites labelled `SIMULATED` use an in-memory `FakeDocker`; they check the
+orchestration and the exact `docker run` arguments but start no container and prove nothing about isolation.
+
+When Docker is unavailable the real tests are **skipped with a loud message, and a skipped run proves nothing about
+isolation**. With `READMEPROOF_DOCKER_TESTS=1` "Docker unavailable" is a failure instead. `npm run test:docker`
+(`scripts/docker-proof.mjs`) goes further and fails unless the daemon is a Linux daemon, every declared real test ran
+and passed (none skipped), the daemon's own event log shows the containers were started, and none was left behind.
+`npm run pack:smoke` with `READMEPROOF_DOCKER_TESTS=1` additionally requires the **installed** executable to pass the
+same kind of isolation probes in real containers. CI runs both on `ubuntu-24.04`.
 ## Known limitations and non-guarantees
 
 - **Docker is not a perfect sandbox.** Containers share the host kernel. A kernel or runtime vulnerability can allow an

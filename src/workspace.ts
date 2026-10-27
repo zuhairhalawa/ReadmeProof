@@ -44,7 +44,7 @@ export interface Workspace {
 
 const EXCLUDED_DIRS = new Set([
   '.git', '.hg', '.svn', '.bzr', 'node_modules', '.ssh', '.aws', '.gnupg', '.gpg', '.docker', '.kube',
-  '.azure', '.config', '.npm', '.terraform', '.vault', '.idea', '.vscode',
+  '.azure', '.config', '.npm', '.terraform', '.vault', '.idea', '.vscode', '.gem', '.m2',
 ]);
 
 const EXCLUDED_FILES = new Set([
@@ -52,10 +52,12 @@ const EXCLUDED_FILES = new Set([
   '.htpasswd', 'credentials', 'credentials.json', 'secrets.json', 'secrets.yml', 'secrets.yaml',
   'kubeconfig', '.vault-token', '.bash_history', '.zsh_history', '.psql_history', '.node_repl_history',
   '.ds_store', 'thumbs.db', 'terraform.tfstate', 'terraform.tfstate.backup', '.git',
+  '.envrc', '.pgpass', '.my.cnf', '.s3cfg', '.boto', '.dockerconfigjson', '.authinfo', 'credentials.toml',
+  'credentials.yml', 'credentials.yaml',
 ]);
 
 const EXCLUDED_EXTENSIONS = new Set([
-  '.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.kdbx', '.gpg', '.p8', '.tfstate', '.tfvars', '.ppk', '.crt-key',
+  '.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.kdbx', '.gpg', '.p8', '.tfstate', '.tfvars', '.ppk', '.crt-key', '.pkcs12', '.jceks',
 ]);
 
 const ENV_SAFE_SUFFIXES = new Set(['.example', '.sample', '.template', '.dist', '.defaults']);
@@ -78,6 +80,7 @@ export function excludedReason(name: string, isDir: boolean): string | undefined
   const ext = path.extname(lower);
   if (EXCLUDED_EXTENSIONS.has(ext)) return 'key or certificate material';
   if (lower.includes('service-account') && ext === '.json') return 'service account credentials';
+  if (lower.endsWith('.tfvars.json')) return 'key or certificate material';
   return undefined;
 }
 

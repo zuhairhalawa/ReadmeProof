@@ -20,13 +20,14 @@ First release (MVP).
 - Annotation convention (`<!-- readmeproof: name= exit= output= output-exact= stderr= creates= timeout= skip -->`).
 - Result model `PASS`/`FAIL`/`SKIP`/`UNVERIFIED`, smoke vs. asserted PASS, `NOTHING VERIFIED` and `UNAVAILABLE`
   verdicts, stable JSON (`schemaVersion: 1`), documented exit codes.
-- Cross-platform CI (Linux, macOS, Windows; Node 20, 22, 24) and a real-Docker isolation job.
+- Cross-platform CI (Linux, macOS, Windows; Node 20, 22, 24) and a mandatory real-Docker job on ubuntu-24.04.
 
 ### Known limitations
 
-- The container integration tests (`test/docker.integration.test.ts`) were written against the Docker CLI semantics but
-  could not be run on the author's machine during the initial build because no Docker daemon was available. Treat
-  isolation as **unverified until the CI `docker-isolation` job has passed** on a real daemon.
+- Isolation is verified only when the real-container tests actually run: `npm run test:docker` (strict proof that every
+  real test executed) and `READMEPROOF_DOCKER_TESTS=1 npm run pack:smoke` (installed executable in real containers).
+  A normal `npm test` without a Docker daemon skips those tests and says so; that run does not verify isolation.
+- Docker is not a perfect sandbox; see SECURITY.md.
 - Secret exclusion for the container copy is name-based.
 - Each block runs in its own container; state is not shared between blocks.
 

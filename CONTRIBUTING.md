@@ -6,7 +6,7 @@ keep that in mind with every change.
 ## Setup
 
 ```console
-$ git clone https://github.com/zuhairhalawa/readmeproof.git
+$ git clone https://github.com/zuhairhalawa/ReadmeProof.git
 $ cd readmeproof
 $ npm install
 $ npm run typecheck
@@ -42,7 +42,7 @@ Run a compact failure-only view of an already compiled test run with `node scrip
 
 1. `check` and `list` never execute anything and never use the network.
 2. Execution only ever happens in a container built by `buildRunArgs` in `src/docker.ts`. Do not add a host fallback.
-3. Do not add privileges, mounts, environment variables or network access to containers. `test/docker.test.ts` lists
+3. Do not add privileges, mounts, environment variables or network access to containers. `test/docker.simulated.test.ts` lists
    forbidden flags; extend that list rather than weakening it.
 4. Annotations may assert and constrain only. A README must not be able to loosen any security setting.
 5. Missing Docker is `UNAVAILABLE`. Zero executed examples is `NOTHING VERIFIED`. Never report either as a pass.
@@ -55,8 +55,10 @@ Run a compact failure-only view of an already compiled test run with `node scrip
 - Add a unit test for every behaviour change; use hostile inputs where relevant.
 - Prefer realistic Markdown in `test/fixtures/` over toy strings when testing parsing or checks. Tests copy fixtures to
   a temp directory (`copyFixture`) so the repository's own `.git` never becomes the project boundary.
-- Container orchestration is tested with `FakeDocker` (a `DockerRuntime` that emulates the marker protocol).
-  Real isolation is tested in `test/docker.integration.test.ts`:
+- Container orchestration is tested with `FakeDocker` (a `DockerRuntime` that emulates the marker protocol). Those tests
+  (`*.simulated.test.ts`, suites labelled `SIMULATED`) are **simulated**: no container starts and they prove nothing
+  about isolation.
+  Real isolation is tested in `test/docker.integration.test.ts` (actual containers):
 
 ```console
 $ docker pull node:22-bookworm-slim
@@ -66,6 +68,10 @@ $ npm test
 When Docker is unavailable those tests are **skipped and say so**. To make "Docker unavailable" an error (as CI does),
 set `READMEPROOF_DOCKER_TESTS=1`; this also lets the tests pull the image. `READMEPROOF_TEST_IMAGE` selects another
 image and `READMEPROOF_DOCKER` points at another docker binary.
+
+`npm run test:docker` (needs Docker; sets `READMEPROOF_DOCKER_TESTS=1`) runs only the real tests and fails unless every
+declared test executed and passed, the daemon logged the container starts and none was left behind. `npm run pack:smoke`
+with `READMEPROOF_DOCKER_TESTS=1` also requires real-container verification of the installed executable.
 
 Never describe isolation as verified in a PR unless the integration tests actually ran against a daemon.
 

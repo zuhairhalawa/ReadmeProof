@@ -136,7 +136,7 @@ describe('list command', () => {
   });
 });
 
-describe('verify command', () => {
+describe('SIMULATED (FakeDocker, no daemon): verify command', () => {
   it('runs a named block through the runtime and exits 0 on PASS', async () => {
     const dir = copyFixture('good-project');
     const docker = new FakeDocker({ run: () => ({ stdout: 'hello from acme\n' }) });

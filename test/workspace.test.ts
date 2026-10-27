@@ -9,15 +9,15 @@ const SECRET = 'SUPERSECRET-DO-NOT-LEAK';
 
 describe('excludedReason', () => {
   it('excludes credentials, keys, history and VCS data', () => {
-    for (const f of ['.env', '.env.local', '.env.production', 'prod.env', '.npmrc', '.netrc', 'id_rsa', 'id_ed25519.pub', 'server.pem', 'tls.key', 'cert.p12', 'a.pfx', 'x.kdbx', '.pypirc', '.git-credentials', 'credentials', '.bash_history', 'terraform.tfstate', 'prod.tfvars', 'my-service-account-1.json', '.git', 'Thumbs.db', '.yarnrc.yml']) {
+    for (const f of ['.env', '.env.local', '.env.production', 'prod.env', '.npmrc', '.netrc', 'id_rsa', 'id_ed25519.pub', 'server.pem', 'tls.key', 'cert.p12', 'a.pfx', 'x.kdbx', '.pypirc', '.git-credentials', 'credentials', '.bash_history', 'terraform.tfstate', 'prod.tfvars', 'my-service-account-1.json', '.git', 'Thumbs.db', '.yarnrc.yml', '.envrc', '.ENVRC', '.Env.Staging', '.ENV', 'ID_RSA', 'id_ecdsa', 'id_dsa', 'x.pkcs12', 'x.jceks', 'store.jks', 'x.keystore', 'putty.ppk', 'AuthKey_X.p8', 'prod.tfvars.json', 'terraform.tfstate.backup', '.pgpass', '.my.cnf', '.s3cfg', '.boto', '.authinfo', '.dockerconfigjson', 'credentials.toml', 'credentials.yaml', '.vault-token', '.htpasswd', '.psql_history', '.zsh_history', '_netrc', 'kubeconfig', 'CREDENTIALS.JSON', 'Secrets.YML']) {
       assert.notEqual(excludedReason(f, false), undefined, f);
     }
-    for (const d of ['.git', '.ssh', '.aws', '.gnupg', 'node_modules', '.docker', '.kube', '.config', '.NPM']) {
+    for (const d of ['.git', '.ssh', '.aws', '.gnupg', 'node_modules', '.docker', '.kube', '.config', '.NPM', '.gem', '.m2', '.SSH', '.Aws', '.azure', '.terraform', '.hg', '.svn', '.vault']) {
       assert.notEqual(excludedReason(d, true), undefined, d);
     }
   });
   it('keeps ordinary files and env templates', () => {
-    for (const f of ['README.md', 'package.json', '.env.example', '.env.sample', '.env.template', '.gitignore', 'index.js', 'environment.ts', 'keys.md']) {
+    for (const f of ['README.md', 'package.json', '.env.example', '.env.sample', '.env.template', '.gitignore', 'index.js', 'environment.ts', 'keys.md', 'credentials.md', 'secrets.md', 'envrc.md', 'environment', 'README.md', 'cert.pub.md']) {
       assert.equal(excludedReason(f, false), undefined, f);
     }
     assert.equal(excludedReason('.github', true), undefined);

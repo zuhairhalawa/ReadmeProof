@@ -104,7 +104,7 @@ describe('hostile Markdown input', () => {
   });
 });
 
-describe('terminal injection', () => {
+describe('SIMULATED (FakeDocker, no daemon): terminal injection', () => {
   it('sanitizes control characters, ANSI escapes and bidi overrides', () => {
     const s = sanitizeForTerminal(`a${ESC}[31mred${ESC}]0;title${BEL} ${RLO}evil${LRI} ${NEL} tab\there\r\nnl`, false);
     assert.ok(!s.includes(ESC));

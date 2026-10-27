@@ -6,7 +6,7 @@
  * Usage: node scripts/pack-smoke.mjs
  */
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,8 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(readFileSync(path.join(repo, 'package.json'), 'utf8'));
 const isWin = process.platform === 'win32';
 const npm = isWin ? 'npm.cmd' : 'npm';
+/* READMEPROOF_DOCKER_TESTS=1 makes real-container verification of the INSTALLED executable mandatory: no skipping, no UNAVAILABLE. */
+const requireDocker = process.env.READMEPROOF_DOCKER_TESTS === '1';
 
 let failures = 0;
 function check(name, ok, detail = '') {
@@ -58,7 +60,8 @@ try {
   /* 3. scan packaged text for secrets and personal paths */
   const unpack = path.join(work, 'unpacked');
   mkdirSync(unpack);
-  const untar = run('tar', ['-xzf', tarball, '-C', unpack]);
+  /* Relative paths only: GNU tar (e.g. Git for Windows) reads "C:" in an archive path as a remote host. */
+  const untar = run('tar', ['-xzf', info.filename, '-C', path.relative(packDir, unpack)], { cwd: packDir });
   check('tarball can be extracted', untar.code === 0, untar.stderr);
   const patterns = [
     [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, 'private key'],
@@ -93,7 +96,7 @@ try {
   /* The installed executable is the shim npm created in node_modules/.bin, run from any working directory. */
   const shim = path.join(proj, 'node_modules', '.bin', isWin ? 'readmeproof.cmd' : 'readmeproof');
   check('installed bin shim exists', statSync(shim, { throwIfNoEntry: false }) !== undefined, shim);
-  const exec = (args, cwd = proj) => run(isWin ? `"${shim}"` : shim, args, { cwd, shell: isWin });
+  const exec = (args, cwd = proj, env) => run(isWin ? `"${shim}"` : shim, args, { cwd, shell: isWin, ...(env ? { env: { ...process.env, ...env } } : {}) });
 
   /* 5. run the real installed executable */
   const v = exec(['--version']);
@@ -128,24 +131,109 @@ try {
   const m = exec(['check', 'does-not-exist.md']);
   check('missing README exits 2', m.code === 2, `${m.code}`);
 
-  /* 6. verify: depends on Docker. Expected outcome is derived from the environment, never assumed. */
-  const image = 'node:22-bookworm-slim';
-  const dockerUp = run('docker', ['version', '--format', '{{.Server.Os}}']).code === 0;
-  const imageThere = dockerUp && run('docker', ['image', 'inspect', image]).code === 0;
-  const ver = exec(['verify', 'README.md', '--block', 'quickstart', '--json'], good);
-  let vj;
+  /* 6. guarantees that must hold with or without Docker: reading never executes, and there is no host fallback */
+  const hostile = path.join(work, 'hostile-project');
+  mkdirSync(path.join(hostile, '.git'), { recursive: true });
+  writeFileSync(path.join(hostile, 'README.md'), ['# Hostile', '', '<!-- readmeproof: name=evil -->', '```sh', 'touch HOST-EXECUTED.txt', '```', ''].join('\n'));
+  const hostExecuted = () => existsSync(path.join(hostile, 'HOST-EXECUTED.txt'));
+  const hc = exec(['check', 'README.md'], hostile);
+  const hl = exec(['list', 'README.md'], hostile);
+  check('check and list never execute README commands (installed executable)', (hc.code === 0 || hc.code === 1) && hl.code === 0 && !hostExecuted(), `${hc.code} ${hl.code}\n${hc.stderr}${hl.stderr}`);
+  const nf = exec(['verify', 'README.md', '--json'], hostile, { READMEPROOF_DOCKER: path.join(work, 'no-such-docker-binary') });
+  let nfj;
   try {
-    vj = JSON.parse(ver.stdout);
+    nfj = JSON.parse(nf.stdout);
   } catch {
-    vj = undefined;
+    nfj = undefined;
   }
-  if (imageThere) {
-    check('verify --block quickstart passes in a real container (Docker + image available)', ver.code === 0 && vj?.results?.[0]?.verification === 'asserted' && vj.results[0].executed === true, `${ver.code} ${ver.stdout.slice(0, 400)} ${ver.stderr}`);
+  check('verify without a usable docker exits 3 UNAVAILABLE and does NOT fall back to the host', nf.code === 3 && nfj?.verdict === 'UNAVAILABLE' && nfj.summary.examplesExecuted === 0 && !hostExecuted(), `${nf.code} ${nf.stdout.slice(0, 300)} ${nf.stderr}`);
+
+  /* 7. real containers through the INSTALLED executable. Mandatory when READMEPROOF_DOCKER_TESTS=1. */
+  const image = 'node:22-bookworm-slim';
+  const dockerOs = run('docker', ['version', '--format', '{{.Server.Os}}']);
+  const dockerUp = dockerOs.code === 0 && dockerOs.stdout.trim() === 'linux';
+  let imageThere = dockerUp && run('docker', ['image', 'inspect', image]).code === 0;
+  if (dockerUp && !imageThere && requireDocker) {
+    console.log(`pulling ${image} (READMEPROOF_DOCKER_TESTS=1)`);
+    imageThere = run('docker', ['pull', '--quiet', image]).code === 0;
+  }
+  if (requireDocker) {
+    check('READMEPROOF_DOCKER_TESTS=1: a Linux Docker daemon and the image are available (skipping is not allowed)', dockerUp && imageThere, `docker up: ${dockerUp}, image present: ${imageThere}`);
+  }
+  const parseJson = (text) => {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return undefined;
+    }
+  };
+
+  if (dockerUp && imageThere) {
+    const daemonTime = () => new Date(run('docker', ['info', '--format', '{{.SystemTime}}']).stdout.trim());
+    const leftover = () => run('docker', ['ps', '-a', '-q', '--filter', 'label=readmeproof=1']).stdout.trim();
+    const t0 = new Date(daemonTime().getTime() - 1000);
+    let expectedStarts = 0;
+
+    /* 7a. the documented quickstart example */
+    const ver = exec(['verify', 'README.md', '--block', 'quickstart', '--json'], good);
+    expectedStarts += 1;
+    const vj = parseJson(ver.stdout);
+    check('verify --block quickstart passes in a real container', ver.code === 0 && vj?.verdict === 'PASS' && vj.results[0].verification === 'asserted' && vj.results[0].executed === true, `${ver.code} ${ver.stdout.slice(0, 400)} ${ver.stderr}`);
+
+    /* 7b. isolation probes executed by the installed CLI, with host secrets planted in env and in the project */
+    const canary = 'smoke-canary-secret-value';
+    const sec = path.join(work, 'security-project');
+    mkdirSync(path.join(sec, '.git'), { recursive: true });
+    mkdirSync(path.join(sec, '.ssh'), { recursive: true });
+    for (const [f, c] of [['.env', `TOKEN=${canary}\n`], ['.npmrc', `//registry/:_authToken=${canary}\n`], ['id_rsa', canary], ['.ssh/id_rsa', canary], ['.git/config', canary], ['keep.txt', 'original\n']]) {
+      writeFileSync(path.join(sec, f), c);
+    }
+    const probes = [
+      ['name=uid output-exact="1000"', 'id -u'],
+      ['name=network output-exact="lo"', 'ls /sys/class/net'],
+      ['name=rootfs output-exact="ROOTFS-READONLY"', 'touch /var/tmp/probe 2>/dev/null && echo ROOTFS-WRITABLE || echo ROOTFS-READONLY'],
+      ['name=capabilities output-exact="CapBnd:0000000000000000"', "grep -E '^CapBnd' /proc/self/status | tr -d '[:space:]'"],
+      ['name=nonewprivs output-exact="NoNewPrivs:1"', "grep -E '^NoNewPrivs' /proc/self/status | tr -d '[:space:]'"],
+      ['name=nosocket output-exact="NO-SOCKET"', 'test -e /var/run/docker.sock && echo SOCKET || echo NO-SOCKET'],
+      ['name=nosecretenv output-exact="0"', "env | grep -c 'smoke-canary-secret-[v]alue' || true"],
+      ['name=nosecretfiles output-exact="checked"', 'for f in .env .npmrc id_rsa .git .ssh; do [ -e "$f" ] && echo "LEAK:$f"; done; echo checked'],
+      ['name=writesstay exit=0 creates=created-in-container.txt', 'echo changed > keep.txt; echo new > created-in-container.txt'],
+    ];
+    writeFileSync(path.join(sec, 'README.md'), '# Isolation probes\n\n' + probes.map(([a, code]) => `<!-- readmeproof: ${a} -->\n\`\`\`sh\n${code}\n\`\`\`\n`).join('\n'));
+    const secEnv = { GITHUB_TOKEN: canary, NPM_TOKEN: canary, READMEPROOF_SMOKE_SECRET: canary };
+    const sv = exec(['verify', 'README.md', '--json'], sec, secEnv);
+    expectedStarts += probes.length;
+    const sj = parseJson(sv.stdout);
+    const notPassed = (sj?.results ?? []).filter((r) => !(r.status === 'PASS' && r.verification === 'asserted' && r.executed === true)).map((r) => `${r.name}: ${r.status} ${r.reason}`);
+    check(`all ${probes.length} isolation probes (non-root, no network, read-only rootfs, no caps, no-new-privs, no socket, no env secrets, no secret files, writes stay in the container) pass via the installed CLI`, sv.code === 0 && sj?.verdict === 'PASS' && sj.results.length === probes.length && notPassed.length === 0, `${sv.code} ${notPassed.join('; ')} ${sv.stderr}`);
+    check('the host project is untouched by the container (no new files, files unchanged)', readFileSync(path.join(sec, 'keep.txt'), 'utf8') === 'original\n' && !existsSync(path.join(sec, 'created-in-container.txt')));
+
+    /* 7c. failure and time-limit handling through the installed CLI */
+    const bad = path.join(work, 'failing-project');
+    mkdirSync(path.join(bad, '.git'), { recursive: true });
+    writeFileSync(path.join(bad, 'README.md'), '# Failing\n\n<!-- readmeproof: name=bad exit=0 -->\n```sh\nexit 3\n```\n\n<!-- readmeproof: name=slow -->\n```sh\nsleep 30\n```\n');
+    const bv = exec(['verify', 'README.md', '--block', 'bad', '--json'], bad);
+    expectedStarts += 1;
+    const bj = parseJson(bv.stdout);
+    check('a failing example exits 1 with verdict FAIL and its real exit code', bv.code === 1 && bj?.verdict === 'FAIL' && bj.results[0].exitCode === 3, `${bv.code} ${bv.stdout.slice(0, 300)}`);
+    const sl = exec(['verify', 'README.md', '--block', 'slow', '--timeout', '3', '--json'], bad);
+    expectedStarts += 1;
+    const slj = parseJson(sl.stdout);
+    check('an example exceeding --timeout is killed: exit 1, timedOut', sl.code === 1 && slj?.results?.[0]?.timedOut === true, `${sl.code} ${sl.stdout.slice(0, 300)}`);
+
+    /* 7d. evidence from the daemon itself, and cleanup */
+    const t1 = daemonTime();
+    const ev = run('docker', ['events', '--since', t0.toISOString(), '--until', t1.toISOString(), '--filter', 'type=container', '--filter', 'event=start', '--filter', 'label=readmeproof=1', '--format', '{{.Actor.ID}}']);
+    const started = new Set(ev.stdout.split('\n').map((l) => l.trim()).filter(Boolean)).size;
+    check(`the Docker daemon recorded ${started} readmeproof container starts caused by the installed executable (expected at least ${expectedStarts})`, ev.code === 0 && started >= expectedStarts, ev.stderr);
+    check('no readmeproof container is left behind after normal, failing and timed-out runs', leftover() === '', leftover());
+    console.log(`REAL CONTAINER VERIFICATION OF THE INSTALLED EXECUTABLE: executed (${started} containers)`);
   } else {
+    const ver = exec(['verify', 'README.md', '--block', 'quickstart', '--json'], good);
+    const vj = parseJson(ver.stdout);
     check(`verify reports UNAVAILABLE with exit 3 and executes nothing (Docker ${dockerUp ? 'up but image missing' : 'not available'}; NO isolation verification happened)`, ver.code === 3 && vj?.verdict === 'UNAVAILABLE' && vj.summary.examplesExecuted === 0, `${ver.code} ${ver.stdout.slice(0, 400)} ${ver.stderr}`);
-    console.log('NOTE  container execution through the packed executable was NOT exercised in this run.');
-  }
-} finally {
+    console.log('NOTE  real container execution through the packed executable was NOT exercised in this run (set READMEPROOF_DOCKER_TESTS=1 on a machine with Docker to require it).');
+  }} finally {
   rmSync(work, { recursive: true, force: true });
 }
 

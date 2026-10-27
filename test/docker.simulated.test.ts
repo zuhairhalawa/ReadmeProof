@@ -1,3 +1,8 @@
+/*
+ * SIMULATED tests: container orchestration is exercised against FakeDocker (an in-memory DockerRuntime), and the
+ * docker command line is checked as data. NO container is started here and nothing in this file proves isolation.
+ * Real-container tests live in docker.integration.test.ts.
+ */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -24,7 +29,7 @@ function pairs(args: string[], flag: string): string[] {
   return out;
 }
 
-describe('buildRunArgs: isolation flags', () => {
+describe('SIMULATED (FakeDocker, no daemon): buildRunArgs: isolation flags', () => {
   const args = buildRunArgs(baseInput);
 
   it('applies every isolation control', () => {
@@ -83,7 +88,7 @@ describe('buildRunArgs: isolation flags', () => {
   });
 });
 
-describe('validateImage', () => {
+describe('SIMULATED (FakeDocker, no daemon): validateImage', () => {
   it('accepts normal references and rejects option injection', () => {
     for (const ok of ['node:22', 'node:22-bookworm-slim', 'ghcr.io/org/img:1.2', 'img@sha256:' + 'a'.repeat(64), 'localhost:5000/x/y:z']) {
       assert.equal(validateImage(ok), undefined, ok);
@@ -94,7 +99,7 @@ describe('validateImage', () => {
   });
 });
 
-describe('needsEsm', () => {
+describe('SIMULATED (FakeDocker, no daemon): needsEsm', () => {
   it('detects static import/export only', () => {
     assert.equal(needsEsm("import x from 'y';"), true);
     assert.equal(needsEsm("  export const a = 1"), true);
@@ -104,7 +109,7 @@ describe('needsEsm', () => {
   });
 });
 
-describe('dockerClientEnv', () => {
+describe('SIMULATED (FakeDocker, no daemon): dockerClientEnv', () => {
   it('forwards only an allowlist and drops credentials', () => {
     const env = dockerClientEnv({
       PATH: '/bin',
@@ -120,7 +125,7 @@ describe('dockerClientEnv', () => {
   });
 });
 
-describe('detectDocker', () => {
+describe('SIMULATED (FakeDocker, no daemon): detectDocker', () => {
   it('reports a missing docker CLI', async () => {
     const s = await detectDocker(new FakeDocker({ cliMissing: true }));
     assert.equal(s.available, false);
@@ -140,7 +145,7 @@ describe('detectDocker', () => {
   });
 });
 
-describe('runBlockInContainer', () => {
+describe('SIMULATED (FakeDocker, no daemon): runBlockInContainer', () => {
   const run = (docker: FakeDocker, code = 'echo hi', creates: string[] = []) =>
     runBlockInContainer(docker, {
       settings: DEFAULT_SETTINGS,
@@ -217,7 +222,7 @@ describe('runBlockInContainer', () => {
   });
 });
 
-describe('createDockerRuntime (process handling, using node as a stand-in binary)', () => {
+describe('SIMULATED (FakeDocker, no daemon): createDockerRuntime (process handling, using node as a stand-in binary)', () => {
   const node = createDockerRuntime(process.execPath, { PATH: process.env['PATH'] ?? '', GITHUB_TOKEN: 'leak-me', MY_SECRET: 'leak-me' });
   const opts = { timeoutMs: 20000, maxCaptureBytes: 1000, killOutputBytes: 1e6 };
 

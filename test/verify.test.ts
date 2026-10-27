@@ -25,7 +25,7 @@ async function verify(readme: string, docker: FakeDocker, extra: Partial<VerifyO
 
 const fence = (ann: string, code: string, lang = 'sh'): string => `${ann}\n\`\`\`${lang}\n${code}\n\`\`\`\n`;
 
-describe('verifyBlocks: assertions', () => {
+describe('SIMULATED (FakeDocker, no daemon): verifyBlocks: assertions', () => {
   it('reports asserted PASS and smoke PASS separately', async () => {
     const readme = fence('<!-- readmeproof: name=a exit=0 output="hello" -->', 'echo hello') + '\n' + fence('', 'echo smoke');
     const docker = new FakeDocker({ run: (c) => ({ stdout: c.script.includes('x') ? 'hello\n' : 'hello\n' }) });
@@ -126,7 +126,7 @@ describe('verifyBlocks: assertions', () => {
   });
 });
 
-describe('verifyBlocks: availability is never a pass', () => {
+describe('SIMULATED (FakeDocker, no daemon): verifyBlocks: availability is never a pass', () => {
   const cases: Array<[string, FakeDockerOptions]> = [
     ['docker CLI missing', { cliMissing: true }],
     ['daemon unreachable', { versionFails: { stderr: 'Cannot connect to the Docker daemon' } }],
@@ -169,7 +169,7 @@ describe('verifyBlocks: availability is never a pass', () => {
   });
 });
 
-describe('verifyBlocks: selection, skipping and policy', () => {
+describe('SIMULATED (FakeDocker, no daemon): verifyBlocks: selection, skipping and policy', () => {
   const readme = [fence('<!-- readmeproof: name=one -->', 'echo 1'), fence('<!-- readmeproof: skip -->', 'echo skipped'), fence('', '{}', 'json'), fence('', 'echo 4')].join('\n');
 
   it('runs everything executable by default and reports skips', async () => {
@@ -231,7 +231,7 @@ describe('verifyBlocks: selection, skipping and policy', () => {
   });
 });
 
-describe('verifyBlocks: sanitized workspace', () => {
+describe('SIMULATED (FakeDocker, no daemon): verifyBlocks: sanitized workspace', () => {
   it('never sends secrets, .git or symlink targets into the container', async () => {
     const docker = new FakeDocker();
     await verify(fence('', 'ls -a'), docker, {}, {
@@ -250,7 +250,7 @@ describe('verifyBlocks: sanitized workspace', () => {
   });
 });
 
-describe('shellBody', () => {
+describe('SIMULATED (FakeDocker, no daemon): shellBody', () => {
   const block = (content: string): CodeBlock => ({ id: 'x', line: 1, endLine: 2, contentLine: 2, kind: 'fenced', language: 'sh', info: 'sh', content, annotation: undefined, annotationLine: undefined });
   it('keeps plain scripts untouched', () => {
     assert.equal(shellBody(block('echo a\necho b\n'), 'sh'), 'echo a\necho b\n');

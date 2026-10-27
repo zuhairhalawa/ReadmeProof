@@ -50,3 +50,34 @@ describe('source hygiene', () => {
   });
 });
 
+
+describe('simulated vs real Docker tests stay distinct', () => {
+  const testDir = path.join(repoRoot, 'test');
+  const sources = readdirSync(testDir).filter((f) => f.endsWith('.test.ts')).map((f) => ({ f, text: readFileSync(path.join(testDir, f), 'utf8') }));
+
+  it('the real-container file never uses the simulated FakeDocker', () => {
+    const real = sources.find((s) => s.f === 'docker.integration.test.ts');
+    assert.ok(real, 'docker.integration.test.ts must exist');
+    assert.ok(!/import[^;]*FakeDocker/.test(real.text), 'must not import FakeDocker');
+    assert.ok(/REAL DOCKER integration \(actual containers\)/.test(real.text));
+  });
+
+  it('every suite that instantiates FakeDocker is labelled SIMULATED', () => {
+    let suitesChecked = 0;
+    for (const s of sources.filter((x) => x.f !== 'hygiene.test.ts' && /import[^;]*FakeDocker/.test(x.text))) {
+      for (const chunk of s.text.split(/^describe\('/m).slice(1)) {
+        const title = chunk.slice(0, chunk.indexOf("'"));
+        if (!/new FakeDocker/.test(chunk)) continue;
+        suitesChecked++;
+        assert.ok(title.startsWith('SIMULATED'), `${s.f}: suite "${title}" uses FakeDocker but is not labelled SIMULATED`);
+      }
+    }
+    assert.ok(suitesChecked >= 5, 'expected to find the simulated suites');
+  });
+
+  it('declares enough real Docker tests that docker-proof can demand them', () => {
+    const real = sources.find((s) => s.f === 'docker.integration.test.ts');
+    const declared = [...(real?.text ?? '').matchAll(/^\s*test\('/gm)].length;
+    assert.ok(declared >= 20, `only ${declared} real Docker tests declared`);
+  });
+});

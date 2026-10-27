@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -31,27 +32,64 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+      # NOTE: the real-container integration tests skip themselves here (no READMEPROOF_DOCKER_TESTS), so this
+      # matrix proves cross-platform behaviour only. Container isolation is proven by the docker-integration job.
       - run: npm test
       - run: npm run pack:smoke
 
-  docker-isolation:
-    name: Real Docker isolation tests (Linux)
-    runs-on: ubuntu-latest
+  docker-integration:
+    name: Real Docker integration (ubuntu-24.04)
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      # Makes an unavailable daemon, a missing image or any skipped real-container test a FAILURE.
+      READMEPROOF_DOCKER_TESTS: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: docker version
+
+      - name: Verify the Docker daemon is available and runs Linux containers
+        run: |
+          docker version
+          docker info --format 'server={{.ServerVersion}} os={{.OSType}} cgroup=v{{.CgroupVersion}} runtime={{.DefaultRuntime}} kernel={{.KernelVersion}}'
+          test "$(docker info --format '{{.OSType}}')" = "linux"
       - run: docker pull node:22-bookworm-slim
       - run: npm ci
       - run: npm run build
-      - name: Container isolation tests (a missing daemon is a failure here)
+
+      - name: Full test suite with Docker REQUIRED (unavailable daemon or skipped real tests fail the job)
         run: npm test
-        env:
-          READMEPROOF_DOCKER_TESTS: '1'
-      - name: Packed executable verifies a README example in a real container
+
+      - name: Strict proof that the real container tests executed (all declared tests ran, daemon logged the containers, none left behind)
+        run: npm run test:docker
+
+      - name: Packed executable is installed and verifies README examples and isolation probes in real containers
         run: npm run pack:smoke
 
+      - name: No readmeproof container may remain after all runs
+        run: |
+          left="$(docker ps -a -q --filter label=readmeproof=1)"
+          if [ -n "$left" ]; then
+            echo "::error::readmeproof containers left behind: $left"
+            exit 1
+          fi
+          echo "no readmeproof containers left behind"
+
+      - name: Negative control - the strict proof must FAIL when Docker is unreachable
+        run: |
+          if DOCKER_HOST=tcp://127.0.0.1:1 node scripts/docker-proof.mjs; then
+            echo "::error::docker-proof passed without a Docker daemon"
+            exit 1
+          fi
+          echo "docker-proof correctly failed without a daemon"
+
+      - name: Negative control - pack:smoke with READMEPROOF_DOCKER_TESTS=1 must FAIL when Docker is unreachable
+        run: |
+          if DOCKER_HOST=tcp://127.0.0.1:1 npm run pack:smoke; then
+            echo "::error::pack:smoke passed without a Docker daemon although Docker was required"
+            exit 1
+          fi
+          echo "pack:smoke correctly failed without a daemon"
